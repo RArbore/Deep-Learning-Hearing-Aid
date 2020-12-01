@@ -120,7 +120,7 @@ def train_model(speech_data, noise_data):
         with torch.no_grad():
             speech_sample = speech_data[0:220500].view(1, 1, -1)
             noise_sample = noise_data[0:220500].view(1, 1, -1)
-            w = torch.rand(1)
+            w = 0.5
             noisy_sample = (w * speech_sample) + ((1 - w) * noise_sample)
 
             output = model(noisy_sample.to(device))
