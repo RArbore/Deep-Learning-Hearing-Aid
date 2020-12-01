@@ -1,6 +1,7 @@
 #Based off of https://arxiv.org/pdf/1806.10522.pdf
 
 from torchvision import transforms
+import soundfile
 import random
 import torch
 import time
@@ -47,25 +48,25 @@ class DenoiseNetwork(torch.nn.Module):
         super(DenoiseNetwork, self).__init__()
         self.conv = torch.nn.Sequential(
             torch.nn.Conv1d(1, W, 3, 1, 1, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 2**0, 2**0, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 2**1, 2**1, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 2**2, 2**2, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 2**3, 2**3, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 2**4, 2**4, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, W, 3, 1, 1, 1, bias=False),
-            AdaptiveBatchNorm1d(W),
+            torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, 1, 1, 1, 0, bias=True),
         )
@@ -88,6 +89,8 @@ def train_model(speech_data, noise_data):
     f = open(folder + "/during_training_performance.txt", "a")
 
     for epoch in range(0, NUM_EPOCHS):
+        os.mkdir(folder + "/epoch"+str(epoch+1))
+
         epoch_loss = 0
         epoch_before_time = current_milli_time()
 
@@ -113,6 +116,19 @@ def train_model(speech_data, noise_data):
             loss.backward()
             opt.step()
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
+
+        with torch.no_grad():
+            speech_sample = speech_data[0:220500].view(1, 1, -1)
+            noise_sample = noise_data[0:220500].view(1, 1, -1)
+            w = torch.rand(1)
+            noisy_sample = (w * speech_sample) + ((1 - w) * noise_sample)
+
+            output = model(noisy_sample.to(device))
+
+            soundfile.write(folder + "/epoch"+str(epoch+1) + "/speech_sample.wav", speech_sample.view(-1).numpy(), 22050)
+            soundfile.write(folder + "/epoch"+str(epoch+1) + "/noise_sample.wav", noise_sample.view(-1).numpy(), 22050)
+            soundfile.write(folder + "/epoch"+str(epoch+1) + "/noisy_sample.wav", noisy_sample.view(-1).numpy(), 22050)
+            soundfile.write(folder + "/epoch"+str(epoch+1) + "/output_sample.wav", output.view(-1).to(cpu).numpy(), 22050)
 
         epoch_after_time = current_milli_time()
         seconds = math.floor((epoch_after_time - epoch_before_time) / 1000)
