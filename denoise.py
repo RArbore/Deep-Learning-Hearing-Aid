@@ -137,7 +137,7 @@ def train_model(speech_data, noise_data):
 
         print("["+str(epoch + 1)+"]   Loss : "+str(epoch_loss)+"   Took "+str(minutes)+" minute(s) and "+str(seconds)+" second(s).")
 
-        f.write(str(epoch + 1)+" "+str(epoch_loss))
+        f.write(str(epoch + 1)+" "+str(epoch_loss)+"\n")
 
     after_time = current_milli_time()
 
