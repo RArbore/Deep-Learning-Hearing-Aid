@@ -50,22 +50,22 @@ class DenoiseNetwork(torch.nn.Module):
             torch.nn.Conv1d(1, W, 3, 1, 1, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 2**0, 2**0, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 2**1, 2**1, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 2**2, 2**2, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 2**3, 2**3, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 2**4, 2**4, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, bias=True),
+            torch.nn.Conv1d(W, W, 3, 1, 1, 1, bias=True),
             #torch.nn.BatchNorm1d(W),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv1d(W, 1, 1, 1, 0, bias=True),
@@ -99,7 +99,7 @@ def train_model(speech_data, noise_data):
             speech_batch = []
             noise_batch = []
             noisy_batch = []
-            selection_indices = (torch.rand(BATCH_SIZE, 2) * (DATA_SIZE - N)).int()
+            selection_indices = (torch.rand(BATCH_SIZE, 2) * (220500 - N)).int() #DATA_SIZE
             for select in range(BATCH_SIZE):
                 speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N].float()
                 speech_batch.append(speech_entry)
