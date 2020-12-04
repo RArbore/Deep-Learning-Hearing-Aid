@@ -1,4 +1,5 @@
-#Based off of https://arxiv.org/pdf/1806.10522.pdf
+#https://arxiv.org/pdf/1806.10522.pdf
+#http://staff.ustc.edu.cn/~jundu/Publications/publications/Trans2015_Xu.pdf
 
 from torchvision import transforms
 import soundfile
@@ -46,33 +47,61 @@ class DenoiseNetwork(torch.nn.Module):
 
     def __init__(self):
         super(DenoiseNetwork, self).__init__()
-        self.conv = torch.nn.Sequential(
-            torch.nn.Conv1d(1, W, 3, 1, 1, bias=False),
-            torch.nn.BatchNorm1d(W),
+        # self.conv = torch.nn.Sequential(
+        #     torch.nn.Conv1d(1, W, 3, 1, 1, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 2**0, 2**0, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 2**1, 2**1, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 2**2, 2**2, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 2**3, 2**3, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 2**4, 2**4, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, W, 3, 1, 1, 1, bias=False),
+        #     torch.nn.BatchNorm1d(W),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv1d(W, 1, 1, 1, 0, bias=True),
+        # )
+        self.linear = torch.nn.Sequential(
+            torch.nn.Linear(N, N-10),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 2**0, 2**0, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-10, N-20),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 2**1, 2**1, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-20, N-30),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 2**2, 2**2, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-30, N-40),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 2**3, 2**3, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-40, N-30),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 2**4, 2**4, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-30, N-20),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, W, 3, 1, 1, 1, bias=False),
-            torch.nn.BatchNorm1d(W),
+            torch.nn.Linear(N-20, N-10),
             torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv1d(W, 1, 1, 1, 0, bias=True),
+            torch.nn.Linear(N-10, N),
         )
 
     def forward(self, input):
-        return self.conv(input)
+        #return self.conv(input)
+        if not input.size()[2] % N == 0:
+            raise Exception("Input not a size multiple of 100.")
+        if input.size()[2] == N:
+            return self.linear(input)
+        i = 0
+        sections = []
+        while i < input.size()[2]:
+            sections.append(self.linear(input[:, :, i:i+N]))
+            i += N
+        return torch.cat(sections, dim=2)
+        
 
 def train_model(speech_data, noise_data):
     model = DenoiseNetwork().to(device)
