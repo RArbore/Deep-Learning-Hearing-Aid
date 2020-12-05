@@ -158,7 +158,7 @@ def train_model(speech_data, noise_data):
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
 
             output = model(noisy_batch.to(device))
-            loss = torch.nn.functional.mse_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
+            loss = torch.nn.functional.smooth_l1_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
             loss.backward()
             opt.step()
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
