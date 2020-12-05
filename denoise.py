@@ -1,6 +1,3 @@
-#https://arxiv.org/pdf/1806.10522.pdf
-#http://staff.ustc.edu.cn/~jundu/Publications/publications/Trans2015_Xu.pdf
-
 from torchvision import transforms
 import soundfile
 import random
