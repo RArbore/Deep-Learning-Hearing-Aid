@@ -17,8 +17,8 @@ BATCH_SIZE = 1000
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 500
 
-N = 1024
-M = 8
+N = 512
+M = 4
 nf = 8
 
 lr = 0.0001
