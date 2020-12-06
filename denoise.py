@@ -163,8 +163,8 @@ def train_model(speech_data, noise_data):
         with torch.no_grad():
             speech_sample_w = speech_data[0:220500].view(1, 1, -1)
             noise_sample_w = noise_data[0:220500].view(1, 1, -1)
-            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 3756)), dim=2)
-            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 3756)), dim=2)
+            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 25260)), dim=2)
+            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 25260)), dim=2)
 
             w = 0.5
             noisy_sample = (w * speech_sample) + ((1 - w) * noise_sample)
