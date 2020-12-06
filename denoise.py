@@ -142,7 +142,7 @@ def train_model(speech_data, noise_data):
             speech_batch = []
             noise_batch = []
             noisy_batch = []
-            selection_indices = (torch.rand(BATCH_SIZE, 2) * (220500 - N*M)).int() #DATA_SIZE
+            selection_indices = (torch.rand(BATCH_SIZE, 2) * (DATA_SIZE - N*M)).int()
             for select in range(BATCH_SIZE):
                 speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N*M].float()
                 speech_batch.append(speech_entry)
