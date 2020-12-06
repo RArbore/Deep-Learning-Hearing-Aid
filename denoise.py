@@ -17,9 +17,9 @@ BATCH_SIZE = 1000
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 500
 
-N = 2048
-M = 8
-nf = 8
+N = 1024
+M = 4
+nf = 16
 
 lr = 0.0001
 b1 = 0.5
@@ -142,7 +142,7 @@ def train_model(speech_data, noise_data):
             speech_batch = []
             noise_batch = []
             noisy_batch = []
-            selection_indices = (torch.rand(BATCH_SIZE, 2) * (DATA_SIZE - N*M)).int()
+            selection_indices = (torch.rand(BATCH_SIZE, 2) * (220500 - N*M)).int() #DATA_SIZE
             for select in range(BATCH_SIZE):
                 speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N*M].float()
                 speech_batch.append(speech_entry)
@@ -163,8 +163,8 @@ def train_model(speech_data, noise_data):
         with torch.no_grad():
             speech_sample_w = speech_data[0:220500].view(1, 1, -1)
             noise_sample_w = noise_data[0:220500].view(1, 1, -1)
-            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 25260)), dim=2)
-            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 25260)), dim=2)
+            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 3756)), dim=2)
+            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 3756)), dim=2)
 
             w = 0.5
             noisy_sample = (w * speech_sample) + ((1 - w) * noise_sample)
@@ -212,12 +212,16 @@ if __name__ == "__main__":
     current_milli_time = lambda: int(round(time.time() * 1000))
     before_time = current_milli_time()
 
-    files = os.listdir(".")
-    m = [int(f[5:]) for f in files if len(f) > 5 and f[0:5] == "trial"]
-    if len(m) > 0:
-        folder = "trial" + str(max(m) + 1)
+    if len(sys.argv) <= 1:
+        files = os.listdir(".")
+        m = [int(f[5:]) for f in files if len(f) > 5 and f[0:5] == "trial"]
+        if len(m) > 0:
+            folder = "trial" + str(max(m) + 1)
+        else:
+            folder = "trial1"
     else:
-        folder = "trial1"
+        folder = sys.argv[1]
+
     os.mkdir(folder)
 
     print("Created session folder " + folder)
