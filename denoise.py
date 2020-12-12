@@ -41,6 +41,17 @@ class AdaptiveBatchNorm1d(torch.nn.Module):
     def forward(self, x):
         return self.a * x + self.b * self.bn(x)
 
+class DepthwiseConv2d(torch.nn.Module):
+    def __init__(self, nin, nout):
+        super(DepthwiseConv2d, self).__init__()
+        self.depthwise = torch.nn.Conv2d(nin, nin, kernel_size=3, padding=1, groups=nin)
+        self.pointwise = torch.nn.Conv2d(nin, nout, kernel_size=1)
+
+    def forward(self, x):
+        out = self.depthwise(x)
+        out = self.pointwise(out)
+        return out
+
 def cartesian_to_polar(input):
     return torch.stack((torch.abs(input), torch.angle(input)), dim=3)
 
@@ -53,17 +64,17 @@ class DenoiseNetwork(torch.nn.Module):
         super(DenoiseNetwork, self).__init__()
         self.s1 = torch.nn.Sequential(
             torch.nn.Conv2d(1, nf, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2),
+            torch.nn.ReLU(True),
         )
         self.s2 = torch.nn.Sequential(
-            torch.nn.AvgPool2d(2),
-            torch.nn.Conv2d(nf, nf * 2, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2),
+            torch.nn.MaxPool2d(2),
+            DepthwiseConv2d(nf, nf * 2),
+            torch.nn.ReLU(True),
         )
         self.s3 = torch.nn.Sequential(
-            torch.nn.AvgPool2d(2),
-            torch.nn.Conv2d(nf * 2, nf * 4, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2),
+            torch.nn.MaxPool2d(2),
+            DepthwiseConv2d(nf * 2, nf * 4),
+            torch.nn.ReLU(True),
         )
         
         # self.s4 = torch.nn.Sequential(
@@ -72,7 +83,7 @@ class DenoiseNetwork(torch.nn.Module):
         # )
         self.s5 = torch.nn.Sequential(
             torch.nn.Conv2d(nf, nf, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2),
+            torch.nn.ReLU(True),
             torch.nn.Conv2d(nf, 1, 1, 1, 0),
         )
 
