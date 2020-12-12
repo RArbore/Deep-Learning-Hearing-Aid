@@ -66,12 +66,12 @@ class DenoiseNetwork(torch.nn.Module):
             torch.nn.LeakyReLU(0.2),
         )
         
-        self.s4 = torch.nn.Sequential(
-            torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2),
-        )
+        # self.s4 = torch.nn.Sequential(
+        #     torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
+        #     torch.nn.LeakyReLU(0.2),
+        # )
         self.s5 = torch.nn.Sequential(
-            torch.nn.Conv2d(nf * 2, nf, 3, 1, 1),
+            torch.nn.Conv2d(nf, nf, 3, 1, 1),
             torch.nn.LeakyReLU(0.2),
             torch.nn.Conv2d(nf, 1, 1, 1, 0),
         )
@@ -94,8 +94,8 @@ class DenoiseNetwork(torch.nn.Module):
         s1 = self.s1(input_magnitude)
         s2 = self.s2(s1)
         s3 = self.s3(s2)
-        s4 = self.s4(torch.cat((s2, self.upconv1(s3)), dim=1))
-        output = self.s5(torch.cat((s1, self.upconv2(s4)), dim=1))
+        s4 = self.upconv2(self.upconv1(s3))
+        output = self.s5(s4)
 
         output = polar_to_cartesian(output.view(input_phase.size()), input_phase)
         output = torch.istft(output, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), length=N*M, return_complex=False)
