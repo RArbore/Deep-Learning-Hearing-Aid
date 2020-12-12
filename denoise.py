@@ -81,7 +81,6 @@ class DenoiseNetwork(torch.nn.Module):
         #     torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
         #     torch.nn.LeakyReLU(0.2),
         # )
-        
         self.s5 = torch.nn.Sequential(
             torch.nn.Conv2d(nf, nf, 3, 1, 1),
             torch.nn.ReLU(True),
