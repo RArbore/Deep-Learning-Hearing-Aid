@@ -13,7 +13,7 @@ random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
 DATA_SIZE = 500000000
-BATCH_SIZE = 2000
+BATCH_SIZE = 100
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 1000
 
