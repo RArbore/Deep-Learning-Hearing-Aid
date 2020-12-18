@@ -29,8 +29,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 cpu = torch.device("cpu")
 
-device = cpu
-
 folder = ""
 
 class AdaptiveBatchNorm1d(torch.nn.Module):
