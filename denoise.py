@@ -15,7 +15,7 @@ torch.manual_seed(manualSeed)
 DATA_SIZE = 500000000
 BATCH_SIZE = 500
 BATCHES_PER_EPOCH = 500
-NUM_EPOCHS = 10000
+NUM_EPOCHS = 1000
 
 N = 1024
 M = 4
@@ -28,6 +28,8 @@ b2 = 0.999
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 cpu = torch.device("cpu")
+
+device = cpu
 
 folder = ""
 
@@ -57,6 +59,19 @@ def cartesian_to_polar(input):
 
 def polar_to_cartesian(mag, phase):
     return torch.view_as_complex(torch.stack((mag[:, :, :]*torch.cos(phase[:, :, :]), mag[:, :, :]*torch.sin(phase[:, :, :])), dim=3))
+
+def model_processing(input, model):
+    input = input.view(input.size()[0], input.size()[2])
+    input = torch.stft(input, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), return_complex=True)
+    input_polar = cartesian_to_polar(input)
+    input_magnitude = input_polar[:, :, :, 0].view(input_polar.size()[0], 1, input_polar.size()[1], input_polar.size()[2])
+    input_phase = input_polar[:, :, :, 1]
+
+    output = model(input_magnitude)
+
+    output = polar_to_cartesian(output.view(input_phase.size()), input_phase)
+    output = torch.istft(output, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), length=N*M, return_complex=False)
+    return output.view(-1, 1, N*M)
 
 class DenoiseNetwork(torch.nn.Module):
 
@@ -94,29 +109,14 @@ class DenoiseNetwork(torch.nn.Module):
             torch.nn.ConvTranspose2d(nf * 2, nf, 2, 2)
         )
 
-    def fourier_to_conv(self, input):
-        input = input.view(input.size()[0], input.size()[2])
-        input = torch.stft(input, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), return_complex=True)
-
-        input_polar = cartesian_to_polar(input)
-        input_magnitude = input_polar[:, :, :, 0].view(input_polar.size()[0], 1, input_polar.size()[1], input_polar.size()[2])
-        input_phase = input_polar[:, :, :, 1]
-
-        s1 = self.s1(input_magnitude)
+    def forward(self, input):
+        s1 = self.s1(input)
         s2 = self.s2(s1)
         s3 = self.s3(s2)
         s4 = self.upconv2(self.upconv1(s3))
         output = self.s5(s4)
 
-        output = polar_to_cartesian(output.view(input_phase.size()), input_phase)
-        output = torch.istft(output, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), length=N*M, return_complex=False)
-        return output.view(-1, 1, N*M)
-
-    def forward(self, input):
-        last_index = len(input.size())-1
-        if not input.size()[last_index] % N*M == 0:
-            raise Exception("Input not a length multiple of N*M.")
-        return self.fourier_to_conv(input)
+        return output
         
 
 def train_model(speech_data, noise_data):
@@ -127,7 +127,7 @@ def train_model(speech_data, noise_data):
     before_time = current_milli_time()
     rand_input = torch.rand(10, 1, N*M)
     for i in range(10):
-        model(rand_input[i:i+1, :, :])
+        model_processing(rand_input[i:i+1, :, :], model)
     after_time = current_milli_time()
     print("Average Inference Time: "+str((after_time-before_time)/10.0))
 
@@ -165,7 +165,7 @@ def train_model(speech_data, noise_data):
             noise_batch = torch.stack(noise_batch).view(BATCH_SIZE, 1, N*M)
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
 
-            output = model(noisy_batch.to(device))
+            output = model_processing(noisy_batch.to(device), model)
             loss = torch.nn.functional.smooth_l1_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
             loss.backward()
             opt.step()
@@ -184,7 +184,7 @@ def train_model(speech_data, noise_data):
             i = 0
             outputs = []
             while i < speech_sample.size()[2] - N*(M-1):
-                app = model(noisy_sample[:, :, i:i+N*M].to(device))[:, :, N*M-N:]
+                app = model_processing(noisy_sample[:, :, i:i+N*M].to(device), model)[:, :, N*M-N:]
                 outputs.append(app)
                 i += N
             output = torch.cat(outputs, dim=2)
