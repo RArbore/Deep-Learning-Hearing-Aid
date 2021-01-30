@@ -4,6 +4,7 @@ import random
 import torch
 import time
 import math
+import stft
 import sys
 import os
 
@@ -12,7 +13,7 @@ print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-DATA_SIZE = 500000000
+DATA_SIZE = 500000000 - 1000000
 BATCH_SIZE = 500
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 500
@@ -28,6 +29,8 @@ b2 = 0.999
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 cpu = torch.device("cpu")
+
+stft_obj = stft.STFT(int(math.sqrt(N*M)-1), int(math.sqrt(N*M)/2), int(math.sqrt(N*M)-1), window='boxcar').to(device)
 
 folder = ""
 
@@ -58,18 +61,23 @@ def cartesian_to_polar(input):
 def polar_to_cartesian(mag, phase):
     return torch.view_as_complex(torch.stack((mag[:, :, :]*torch.cos(phase[:, :, :]), mag[:, :, :]*torch.sin(phase[:, :, :])), dim=3))
 
+# def model_processing(input, model):
+#     input = input.view(input.size()[0], input.size()[2])
+#     input = torch.stft(input, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), return_complex=True)
+#     input_polar = cartesian_to_polar(input)
+#     input_magnitude = input_polar[:, :, :, 0].view(input_polar.size()[0], 1, input_polar.size()[1], input_polar.size()[2])
+#     input_phase = input_polar[:, :, :, 1]
+
+#     output = model(input_magnitude)
+
+#     output = polar_to_cartesian(output.view(input_phase.size()), input_phase)
+#     output = torch.istft(output, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), length=N*M, return_complex=False)
+#     return output.view(-1, 1, N*M)
+
 def model_processing(input, model):
-    input = input.view(input.size()[0], input.size()[2])
-    input = torch.stft(input, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), return_complex=True)
-    input_polar = cartesian_to_polar(input)
-    input_magnitude = input_polar[:, :, :, 0].view(input_polar.size()[0], 1, input_polar.size()[1], input_polar.size()[2])
-    input_phase = input_polar[:, :, :, 1]
-
-    output = model(input_magnitude)
-
-    output = polar_to_cartesian(output.view(input_phase.size()), input_phase)
-    output = torch.istft(output, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), length=N*M, return_complex=False)
-    return output.view(-1, 1, N*M)
+    magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M).to(device))
+    d_magnitude = model(magnitude.view(-1, 1, 32, 128).to(device))
+    return stft_obj.inverse(d_magnitude.view(-1, 32, 128).to(device), phase.to(device))
 
 class DenoiseNetwork(torch.nn.Module):
 
@@ -77,59 +85,79 @@ class DenoiseNetwork(torch.nn.Module):
         super(DenoiseNetwork, self).__init__()
         self.s1 = torch.nn.Sequential(
             torch.nn.Conv2d(1, nf, 3, 1, 1),
-            torch.nn.ReLU(True),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf, nf, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
         )
         self.s2 = torch.nn.Sequential(
             torch.nn.MaxPool2d(2),
-            DepthwiseConv2d(nf, nf * 2),
-            torch.nn.ReLU(True),
+            torch.nn.Conv2d(nf, nf * 2, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
         )
         self.s3 = torch.nn.Sequential(
             torch.nn.MaxPool2d(2),
-            DepthwiseConv2d(nf * 2, nf * 4),
-            torch.nn.ReLU(True),
+            torch.nn.Conv2d(nf * 2, nf * 4, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 4, nf * 4, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
         )
         
-        # self.s4 = torch.nn.Sequential(
-        #     torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
-        #     torch.nn.LeakyReLU(0.2),
-        # )
+        self.s4 = torch.nn.Sequential(
+            torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
+        )
         self.s5 = torch.nn.Sequential(
+            torch.nn.Conv2d(nf * 2, nf, 3, 1, 1),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
             torch.nn.Conv2d(nf, nf, 3, 1, 1),
-            torch.nn.ReLU(True),
+            torch.nn.Dropout(0.5),
+            torch.nn.LeakyReLU(0.2),
             torch.nn.Conv2d(nf, 1, 1, 1, 0),
         )
 
         self.upconv1 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(nf * 4, nf * 2, 2, 2)
+            torch.nn.ConvTranspose2d(nf * 4, nf * 2, 2, 2),
+            torch.nn.Dropout(0.5),
         )
         self.upconv2 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(nf * 2, nf, 2, 2)
+            torch.nn.ConvTranspose2d(nf * 2, nf, 2, 2),
+            torch.nn.Dropout(0.5),
         )
 
     def forward(self, input):
         s1 = self.s1(input)
         s2 = self.s2(s1)
         s3 = self.s3(s2)
-        s4 = self.upconv2(self.upconv1(s3))
-        output = self.s5(s4)
+        s4 = self.s4(torch.cat((s2, self.upconv1(s3)), dim=1))
+        output = self.s5(torch.cat((s1, self.upconv2(s4)), dim=1))
 
         return output
         
 
 def train_model(speech_data, noise_data):
-    model = DenoiseNetwork()
+    model = DenoiseNetwork().to(device)
 
     current_milli_time = lambda: int(round(time.time() * 1000))
 
-    before_time = current_milli_time()
-    rand_input = torch.rand(10, 1, N*M)
-    for i in range(10):
-        model_processing(rand_input[i:i+1, :, :], model)
-    after_time = current_milli_time()
-    print("Average Inference Time: "+str((after_time-before_time)/10.0))
-
-    model = model.to(device)
+    # before_time = current_milli_time()
+    # rand_input = torch.rand(10, 1, N*M).to(device)
+    # for i in range(10):
+    #     model_processing(rand_input[i:i+1, :, :], model)
+    # after_time = current_milli_time()
+    # print("Average Inference Time: "+str((after_time-before_time)/10.0))
 
     opt = torch.optim.Adam(model.parameters(), lr=lr, betas=(b1, b2))
 
@@ -148,6 +176,7 @@ def train_model(speech_data, noise_data):
 
         for batch in range(BATCHES_PER_EPOCH):
             opt.zero_grad()
+            model = model.train()
             speech_batch = []
             noise_batch = []
             noisy_batch = []
@@ -170,8 +199,9 @@ def train_model(speech_data, noise_data):
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
 
         with torch.no_grad():
-            speech_sample_w = speech_data[0:220500].view(1, 1, -1)
-            noise_sample_w = noise_data[0:220500].view(1, 1, -1)
+            model = model.eval()
+            speech_sample_w = speech_data[DATA_SIZE:DATA_SIZE+220500].view(1, 1, -1)
+            noise_sample_w = noise_data[DATA_SIZE:DATA_SIZE+220500].view(1, 1, -1)
             speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 3756)), dim=2)
             noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 3756)), dim=2)
 

@@ -24,12 +24,10 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-import librosa
 import torch
 import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
-from scipy.signal import get_window
 from audio_processing import window_sumsquare
 
 
@@ -57,8 +55,8 @@ class STFT(torch.nn.Module):
         if window is not None:
             assert(filter_length >= win_length)
             # get window and zero center pad it to filter_length
-            fft_window = get_window(window, win_length, fftbins=True)
-            fft_window = librosa.util.pad_center(fft_window, filter_length)
+            fft_window = np.ones((win_length))
+            #fft_window = librosa.util.pad_center(fft_window, filter_length)
             fft_window = torch.from_numpy(fft_window).float()
 
             # window the bases
@@ -115,7 +113,7 @@ class STFT(torch.nn.Module):
                 dtype=np.float32)
             # remove modulation effects
             approx_nonzero_indices = torch.from_numpy(
-                np.where(window_sum > librosa.util.tiny(window_sum))[0])
+                np.where(window_sum > 1.1754944e-38)[0])
             window_sum = torch.autograd.Variable(
                 torch.from_numpy(window_sum), requires_grad=False)
             window_sum = window_sum.cuda() if magnitude.is_cuda else window_sum

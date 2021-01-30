@@ -15,6 +15,9 @@ import stft
 import sys
 import os
 
+DATA_SIZE = 500000000
+REP_DATA_SIZE = 100
+
 N = 1024
 M = 4
 nf = 16
@@ -89,6 +92,25 @@ class DenoiseNetwork(torch.nn.Module):
 
         return output
 
+speech_data = torch.load("SPEECH.pt")
+noise_data = torch.load("NOISE.pt")
+
+def cartesian_to_polar(input):
+    return torch.stack((torch.abs(input), torch.angle(input)), dim=3)
+
+def rep_dataset():
+    selection_indices = (torch.rand(REP_DATA_SIZE, 2) * (DATA_SIZE - N*M)).int()
+    for select in range(REP_DATA_SIZE):
+        speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N*M].float()
+        noise_entry = noise_data[selection_indices[select, 1]:selection_indices[select, 1] + N*M].float()
+        w = torch.rand(1)
+        noisy_batch = (w * speech_entry) + ((1 - w) * noise_entry)
+        input = noisy_batch.view(1, N*M)
+        input = torch.stft(input, int(math.sqrt(N*M)-1), hop_length=int(math.sqrt(N*M)/2), return_complex=True)
+        input_polar = cartesian_to_polar(input)
+        input_magnitude = input_polar[:, :, :, 0].view(1, 32, 128, 1)
+        yield [noisy_batch.detach().numpy()]
+
 model_pytorch = DenoiseNetwork()
 model_pytorch.load_state_dict(torch.load("trial22/model.pt"))
 model_pytorch = model_pytorch.to(cpu)
@@ -110,6 +132,8 @@ dummy_output = model_pytorch(dummy_input)
 
 model_keras = pytorch2keras.pytorch_to_keras(model_pytorch, dummy_input, [(1, 32, 128,)], verbose=True, change_ordering=True)
 
+print(model_keras.summary())
+
 K.set_image_data_format("channels_last")
 
 np_input = dummy_input.view(1, 32, 128, 1).detach().numpy()
@@ -123,13 +147,44 @@ model_tfl = converter.convert()
 with open("trial22/model.tflite", "wb") as f:
     f.write(model_tfl)
 
-# interpreter = tf.lite.Interpreter(model_path="trial22/model.tflite")
-# interpreter.allocate_tensors()
+interpreter = tf.lite.Interpreter(model_path="trial22/model.tflite")
+interpreter.allocate_tensors()
 
-# input_details = interpreter.get_input_details()
-# output_details = interpreter.get_output_details()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-# interpreter.set_tensor(input_details[0]['index'], tf_input)
-# interpreter.invoke()
+current_milli_time = lambda: int(round(time.time() * 1000))
 
-# tfl_output = interpreter.get_tensor(output_details[0]['index'])
+before_time = current_milli_time()
+for i in range(10):
+    interpreter.set_tensor(input_details[0]['index'], tf_input)
+    interpreter.invoke()
+
+    tfl_output = interpreter.get_tensor(output_details[0]['index'])
+after_time = current_milli_time()
+print("Normal TFLite Average Inference Time: "+str((after_time-before_time)/10.0))
+
+converter = tf.lite.TFLiteConverter.from_keras_model(model_keras)
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+# converter.representative_dataset = rep_dataset
+# converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+# converter.inference_input_type = tf.int8
+# converter.inference_output_type = tf.int8
+tflite_quant_model = converter.convert()
+with open("trial22/model_q.tflite", "wb") as f:
+    f.write(tflite_quant_model)
+
+interpreter = tf.lite.Interpreter(model_path="trial22/model_q.tflite")
+interpreter.allocate_tensors()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+before_time = current_milli_time()
+for i in range(10):
+    interpreter.set_tensor(input_details[0]['index'], tf_input)
+    interpreter.invoke()
+
+    tfl_output = interpreter.get_tensor(output_details[0]['index'])
+after_time = current_milli_time()
+print("Quantized TFLite Average Inference Time: "+str((after_time-before_time)/10.0))

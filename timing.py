@@ -12,7 +12,7 @@ nf = 16
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-stft_obj = stft.STFT(int(math.sqrt(N*M)-1), int(math.sqrt(N*M)/2), int(math.sqrt(N*M)-1), window='boxcar').to(device)
+stft_obj = stft.STFT(int(math.sqrt(N*M)-1), int(math.sqrt(N*M)/2), int(math.sqrt(N*M)-1), window='boxcar').to(device).eval()
 
 current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -33,26 +33,36 @@ class DenoiseNetwork(torch.nn.Module):
         super(DenoiseNetwork, self).__init__()
         self.s1 = torch.nn.Sequential(
             torch.nn.Conv2d(1, nf, 3, 1, 1),
-            torch.nn.ReLU(True),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf, nf, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
         )
         self.s2 = torch.nn.Sequential(
             torch.nn.MaxPool2d(2),
-            DepthwiseConv2d(nf, nf * 2),
-            torch.nn.ReLU(True),
+            torch.nn.Conv2d(nf, nf * 2, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
         )
         self.s3 = torch.nn.Sequential(
             torch.nn.MaxPool2d(2),
-            DepthwiseConv2d(nf * 2, nf * 4),
-            torch.nn.ReLU(True),
+            torch.nn.Conv2d(nf * 2, nf * 4, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 4, nf * 4, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
         )
         
-        # self.s4 = torch.nn.Sequential(
-        #     torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
-        #     torch.nn.LeakyReLU(0.2),
-        # )
+        self.s4 = torch.nn.Sequential(
+            torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
+            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
+        )
         self.s5 = torch.nn.Sequential(
+            torch.nn.Conv2d(nf * 2, nf, 3, 1, 1),
+            torch.nn.LeakyReLU(0.2),
             torch.nn.Conv2d(nf, nf, 3, 1, 1),
-            torch.nn.ReLU(True),
+            torch.nn.LeakyReLU(0.2),
             torch.nn.Conv2d(nf, 1, 1, 1, 0),
         )
 
@@ -67,19 +77,19 @@ class DenoiseNetwork(torch.nn.Module):
         s1 = self.s1(input)
         s2 = self.s2(s1)
         s3 = self.s3(s2)
-        s4 = self.upconv2(self.upconv1(s3))
-        output = self.s5(s4)
+        s4 = self.s4(torch.cat((s2, self.upconv1(s3)), dim=1))
+        output = self.s5(torch.cat((s1, self.upconv2(s4)), dim=1))
 
         return output
 
 def run_model(input):
-    # magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M))
-    # d_magnitude = model(magnitude.view(1, 1, 32, 128))
-    # return stft_obj.inverse(d_magnitude.view(1, 32, 128), phase)
-    return model(input.view(1, 1, 32, 128)).view(1, 1, 4096)
+    magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M))
+    d_magnitude = model(magnitude.view(1, 1, 32, 128))
+    return stft_obj.inverse(d_magnitude.view(1, 32, 128), phase)
+    #return model(input.view(1, 1, 32, 128)).view(1, 1, 4096)
 
 rand_input = torch.rand(1001, 1, 4096).to(device)
-model = DenoiseNetwork().to(device)
+model = DenoiseNetwork().to(device).eval()
 run_model(rand_input[1000:1001])
 before_time = current_milli_time()
 for i in range(1000):
@@ -88,7 +98,7 @@ for i in range(1000):
     run_model(rand_input[i:i+1])
 
     b_after_time = current_milli_time()
-    print(b_after_time-b_before_time)
+    #print(b_after_time-b_before_time)
 
 after_time = current_milli_time()
 print("Average Inference Time: "+str((after_time-before_time)/1000.0))
