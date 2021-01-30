@@ -187,7 +187,7 @@ def train_model(speech_data, noise_data):
                 noise_entry = noise_data[selection_indices[select, 1]:selection_indices[select, 1] + N*M].float()
                 noise_batch.append(noise_entry)
                 w = torch.rand(1)
-                noisy_batch.append((w * speech_entry) + ((1 - w) * noise_entry))
+                noisy_batch.append(((w * speech_entry) + ((1 - w) * noise_entry))*2)
             speech_batch = torch.stack(speech_batch).view(BATCH_SIZE, 1, N*M)
             noise_batch = torch.stack(noise_batch).view(BATCH_SIZE, 1, N*M)
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
@@ -206,8 +206,8 @@ def train_model(speech_data, noise_data):
             noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 3756)), dim=2)
 
             w = 0.5
-            noisy_sample = (w * speech_sample) + ((1 - w) * noise_sample)
-            noisy_sample_w = (w * speech_sample_w) + ((1 - w) * noise_sample_w)
+            noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))*2
+            noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))*2
 
             i = 0
             outputs = []
@@ -267,8 +267,8 @@ if __name__ == "__main__":
 
     print("Loading data...")
 
-    speech_data = torch.load("SPEECH.pt")
-    noise_data = torch.load("NOISE.pt")
+    speech_data = torch.load("SPEECH.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + 1000000)), dims=0)
+    noise_data = torch.load("NOISE.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + 1000000)), dims=0)
 
     after_time = current_milli_time()
     seconds = math.floor((after_time - before_time) / 1000)
