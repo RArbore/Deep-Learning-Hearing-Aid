@@ -7,7 +7,7 @@ import sys
 import os
 
 N = 1024
-M = 4
+M = 16
 nf = 16
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -84,11 +84,11 @@ class DenoiseNetwork(torch.nn.Module):
 
 def run_model(input):
     magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M))
-    d_magnitude = model(magnitude.view(1, 1, 32, 128))
-    return stft_obj.inverse(d_magnitude.view(1, 32, 128), phase)
+    d_magnitude = model(magnitude.view(1, 1, 64, 256))
+    return stft_obj.inverse(d_magnitude.view(1, 64, 256), phase)
     #return model(input.view(1, 1, 32, 128)).view(1, 1, 4096)
 
-rand_input = torch.rand(1001, 1, 4096).to(device)
+rand_input = torch.rand(1001, 1, N*M).to(device)
 model = DenoiseNetwork().to(device).eval()
 run_model(rand_input[1000:1001])
 before_time = current_milli_time()

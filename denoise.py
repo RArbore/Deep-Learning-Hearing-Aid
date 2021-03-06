@@ -13,13 +13,15 @@ print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-DATA_SIZE = 500000000 - 1000000
-BATCH_SIZE = 500
+VALID_DATA_SIZE = 10000000
+DATA_SIZE = 500000000 - VALID_DATA_SIZE
+BATCH_SIZE = 100
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 500
 
 N = 1024
-M = 4
+M = 16
+RESIZE_CONSTANTS = [64, 256]
 nf = 16
 
 lr = 0.0001
@@ -76,8 +78,8 @@ def polar_to_cartesian(mag, phase):
 
 def model_processing(input, model):
     magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M).to(device))
-    d_magnitude = model(magnitude.view(-1, 1, 32, 128).to(device))
-    return stft_obj.inverse(d_magnitude.view(-1, 32, 128).to(device), phase.to(device))
+    d_magnitude = model(magnitude.view(-1, 1, RESIZE_CONSTANTS[0], RESIZE_CONSTANTS[1]).to(device))
+    return stft_obj.inverse(d_magnitude.view(-1, RESIZE_CONSTANTS[0], RESIZE_CONSTANTS[1]).to(device), phase.to(device))
 
 class DenoiseNetwork(torch.nn.Module):
 
@@ -187,36 +189,37 @@ def train_model(speech_data, noise_data):
                 noise_entry = noise_data[selection_indices[select, 1]:selection_indices[select, 1] + N*M].float()
                 noise_batch.append(noise_entry)
                 w = torch.rand(1)
-                noisy_batch.append(((w * speech_entry) + ((1 - w) * noise_entry))*2)
+                noisy_batch.append(((w * speech_entry) + ((1 - w) * noise_entry)))
             speech_batch = torch.stack(speech_batch).view(BATCH_SIZE, 1, N*M)
             noise_batch = torch.stack(noise_batch).view(BATCH_SIZE, 1, N*M)
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
 
             output = model_processing(noisy_batch.to(device), model)
-            loss = torch.nn.functional.smooth_l1_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
+            loss = torch.nn.functional.mse_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
             loss.backward()
             opt.step()
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
 
         with torch.no_grad():
             model = model.eval()
-            speech_sample_w = speech_data[DATA_SIZE:DATA_SIZE+220500].view(1, 1, -1)
-            noise_sample_w = noise_data[DATA_SIZE:DATA_SIZE+220500].view(1, 1, -1)
-            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 3756)), dim=2)
-            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 3756)), dim=2)
+            speech_sample_w = speech_data[DATA_SIZE:DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
+            noise_sample_w = noise_data[DATA_SIZE:DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
+            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 2432)), dim=2)
+            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 2432)), dim=2)
 
             w = 0.5
-            noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))*2
-            noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))*2
+            noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))
+            noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))
 
             i = 0
             outputs = []
             while i < speech_sample.size()[2] - N*(M-1):
+                # print(noisy_sample[:, :, i:i+N*M].to(device).size())
                 app = model_processing(noisy_sample[:, :, i:i+N*M].to(device), model)[:, :, N*M-N:]
                 outputs.append(app)
                 i += N
             output = torch.cat(outputs, dim=2)
-            output = output[:, :, N*(M-1):220500+N*(M-1)]
+            output = output[:, :, N*(M-1):VALID_DATA_SIZE+N*(M-1)]
             
             soundfile.write(folder + "/epoch"+str(epoch+1) + "/speech_sample.wav", speech_sample_w.view(-1).numpy(), 22050)
             soundfile.write(folder + "/epoch"+str(epoch+1) + "/noise_sample.wav", noise_sample_w.view(-1).numpy(), 22050)
@@ -267,8 +270,11 @@ if __name__ == "__main__":
 
     print("Loading data...")
 
-    speech_data = torch.load("SPEECH.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + 1000000)), dims=0)
-    noise_data = torch.load("NOISE.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + 1000000)), dims=0)
+    speech_data = torch.load("SPEECH.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + VALID_DATA_SIZE)), dims=0)
+    noise_data = torch.load("NOISE.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + VALID_DATA_SIZE)), dims=0)
+    
+    speech_data = speech_data.roll(int(torch.rand(1).item() * speech_data.size(0)), dims=0)
+    noise_data = noise_data.roll(int(torch.rand(1).item() * noise_data.size(0)), dims=0)
 
     after_time = current_milli_time()
     seconds = math.floor((after_time - before_time) / 1000)
