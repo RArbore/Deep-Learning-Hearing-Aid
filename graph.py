@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
+import sys
 
-path = "trial21/copy_at_7139.txt"
+path = "trial"+sys.argv[1]+"/during_training_performance.txt"
 
 f = open(path)
 read = f.read()

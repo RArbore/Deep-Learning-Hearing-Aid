@@ -174,6 +174,7 @@ def train_model(speech_data, noise_data):
         os.mkdir(folder + "/epoch"+str(epoch+1))
 
         epoch_loss = 0
+        valid_loss = 0
         epoch_before_time = current_milli_time()
 
         for batch in range(BATCHES_PER_EPOCH):
@@ -211,16 +212,23 @@ def train_model(speech_data, noise_data):
             noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))
             noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))
 
+            valid_iters = 0
             i = 0
             outputs = []
             while i < speech_sample.size()[2] - N*(M-1):
                 # print(noisy_sample[:, :, i:i+N*M].to(device).size())
-                app = model_processing(noisy_sample[:, :, i:i+N*M].to(device), model)[:, :, N*M-N:]
+                block_input = noisy_sample[:, :, i:i+N*M].to(device)
+                app = model_processing(block_input, model)[:, :, N*M-N:]
+                loss = torch.nn.functional.mse_loss(app, block_input[:, :, N*M-N:])
+                valid_loss += loss.to(cpu).item()
                 outputs.append(app)
                 i += N
+                valid_iters += 1
             output = torch.cat(outputs, dim=2)
             output = output[:, :, N*(M-1):VALID_DATA_SIZE+N*(M-1)]
             
+            valid_loss /= valid_iters
+
             soundfile.write(folder + "/epoch"+str(epoch+1) + "/speech_sample.wav", speech_sample_w.view(-1).numpy(), 22050)
             soundfile.write(folder + "/epoch"+str(epoch+1) + "/noise_sample.wav", noise_sample_w.view(-1).numpy(), 22050)
             soundfile.write(folder + "/epoch"+str(epoch+1) + "/noisy_sample.wav", noisy_sample_w.view(-1).numpy(), 22050)
@@ -231,9 +239,9 @@ def train_model(speech_data, noise_data):
         minutes = math.floor(seconds / 60)
         seconds = seconds % 60
 
-        print("["+str(epoch + 1)+"]   Loss : "+str(epoch_loss)+"   Took "+str(minutes)+" minute(s) and "+str(seconds)+" second(s).")
+        print("["+str(epoch + 1)+"]   Loss : "+str(epoch_loss)+"      Validation Loss : "+str(valid_loss)+"   Took "+str(minutes)+" minute(s) and "+str(seconds)+" second(s).")
 
-        f.write(str(epoch + 1)+" "+str(epoch_loss)+"\n")
+        f.write(str(epoch + 1)+" "+str(epoch_loss)+" "+str(valid_loss)+"\n")
 
     after_time = current_milli_time()
 
