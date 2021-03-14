@@ -1,3 +1,5 @@
+#https://arxiv.org/pdf/1609.07132.pdf
+
 from torchvision import transforms
 import soundfile
 import random
@@ -15,9 +17,9 @@ torch.manual_seed(manualSeed)
 
 VALID_DATA_SIZE = 10000000
 DATA_SIZE = 500000000 - VALID_DATA_SIZE
-BATCH_SIZE = 100
+BATCH_SIZE = 200
 BATCHES_PER_EPOCH = 500
-NUM_EPOCHS = 500
+NUM_EPOCHS = 1000
 
 N = 1024
 M = 16
@@ -33,6 +35,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 cpu = torch.device("cpu")
 
 stft_obj = stft.STFT(int(math.sqrt(N*M)-1), int(math.sqrt(N*M)/2), int(math.sqrt(N*M)-1), window='boxcar').to(device)
+# stft_obj = stft.STFT(256, 64, 256, window='boxcar').to(device)
 
 folder = ""
 
@@ -79,75 +82,146 @@ def polar_to_cartesian(mag, phase):
 def model_processing(input, model):
     magnitude, phase = stft_obj.transform(input.view(input.size(0), N*M).to(device))
     d_magnitude = model(magnitude.view(-1, 1, RESIZE_CONSTANTS[0], RESIZE_CONSTANTS[1]).to(device))
-    return stft_obj.inverse(d_magnitude.view(-1, RESIZE_CONSTANTS[0], RESIZE_CONSTANTS[1]).to(device), phase.to(device))
+    return stft_obj.inverse(d_magnitude.view(-1, RESIZE_CONSTANTS[0], int(RESIZE_CONSTANTS[1]/M)).to(device), phase[:, :, int(RESIZE_CONSTANTS[1]*(M-1)/M):].to(device))
+
+
 
 class DenoiseNetwork(torch.nn.Module):
 
     def __init__(self):
         super(DenoiseNetwork, self).__init__()
-        self.s1 = torch.nn.Sequential(
-            torch.nn.Conv2d(1, nf, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf, nf, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-        )
-        self.s2 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(nf, nf * 2, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-        )
-        self.s3 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(nf * 2, nf * 4, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf * 4, nf * 4, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-        )
+        # self.s1 = torch.nn.Sequential(
+        #     torch.nn.Conv2d(1, nf, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf, nf, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        # )
+        # self.s2 = torch.nn.Sequential(
+        #     torch.nn.MaxPool2d(2),
+        #     torch.nn.Conv2d(nf, nf * 2, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        # )
+        # self.s3 = torch.nn.Sequential(
+        #     torch.nn.MaxPool2d(2),
+        #     torch.nn.Conv2d(nf * 2, nf * 4, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf * 4, nf * 4, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        # )
         
-        self.s4 = torch.nn.Sequential(
-            torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
+        # self.s4 = torch.nn.Sequential(
+        #     torch.nn.Conv2d(nf * 4, nf * 2, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf * 2, nf * 2, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        # )
+        # self.s5 = torch.nn.Sequential(
+        #     torch.nn.Conv2d(nf * 2, nf, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf, nf, 3, 1, 1),
+        #     torch.nn.Dropout(0.5),
+        #     torch.nn.LeakyReLU(0.2),
+        #     torch.nn.Conv2d(nf, 1, 1, 1, 0),
+        # )
+
+        # self.upconv1 = torch.nn.Sequential(
+        #     torch.nn.ConvTranspose2d(nf * 4, nf * 2, 2, 2),
+        #     torch.nn.Dropout(0.5),
+        # )
+        # self.upconv2 = torch.nn.Sequential(
+        #     torch.nn.ConvTranspose2d(nf * 2, nf, 2, 2),
+        #     torch.nn.Dropout(0.5),
+        # )
+
+        self.b1 = torch.nn.Sequential(
+            torch.nn.Conv2d(1, nf * 2, (9, 241), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.Conv2d(nf * 2, nf * 4, (5, 1), (1, 1), (2, 0), bias=False),
         )
-        self.s5 = torch.nn.Sequential(
-            torch.nn.Conv2d(nf * 2, nf, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf, nf, 3, 1, 1),
-            torch.nn.Dropout(0.5),
-            torch.nn.LeakyReLU(0.2),
-            torch.nn.Conv2d(nf, 1, 1, 1, 0),
+        self.b2 = torch.nn.Sequential(
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.Conv2d(nf * 4, nf, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf),
+            torch.nn.Conv2d(nf, nf * 2, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.Conv2d(nf * 2, nf * 4, (5, 1), (1, 1), (2, 0), bias=False),
+        )
+        self.b3 = torch.nn.Sequential(
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.Conv2d(nf * 4, nf, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf),
+            torch.nn.Conv2d(nf, nf * 2, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.Conv2d(nf * 2, nf * 4, (5, 1), (1, 1), (2, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.Conv2d(nf * 4, nf, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf),
+            torch.nn.Conv2d(nf, nf * 2, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.Conv2d(nf * 2, nf * 4, (5, 1), (1, 1), (2, 0), bias=False),
+        )
+        self.b4 = torch.nn.Sequential(
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.Conv2d(nf * 4, nf, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf),
+            torch.nn.Conv2d(nf, nf * 2, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.Conv2d(nf * 2, nf * 4, (5, 1), (1, 1), (2, 0), bias=False),
+        )
+        self.b5 = torch.nn.Sequential(
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.Conv2d(nf * 4, nf, (9, 1), (1, 1), (4, 0), bias=False),
+            torch.nn.ReLU(True),
+            torch.nn.BatchNorm2d(nf),
+            torch.nn.Dropout2d(0.2, True),
+            torch.nn.Conv2d(nf, 1, (1, 1), (1, 1), (0, 0), bias=True),
         )
 
-        self.upconv1 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(nf * 4, nf * 2, 2, 2),
-            torch.nn.Dropout(0.5),
-        )
-        self.upconv2 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(nf * 2, nf, 2, 2),
-            torch.nn.Dropout(0.5),
-        )
 
     def forward(self, input):
-        s1 = self.s1(input)
-        s2 = self.s2(s1)
-        s3 = self.s3(s2)
-        s4 = self.s4(torch.cat((s2, self.upconv1(s3)), dim=1))
-        output = self.s5(torch.cat((s1, self.upconv2(s4)), dim=1))
+        # s1 = self.s1(input)
+        # s2 = self.s2(s1)
+        # s3 = self.s3(s2)
+        # s4 = self.s4(torch.cat((s2, self.upconv1(s3)), dim=1))
+        # output = self.s5(torch.cat((s1, self.upconv2(s4)), dim=1))
+        # return output
 
-        return output
+        b1 = self.b1(input)
+        b2 = self.b2(b1)
+        b3 = self.b3(b2)
+        b4 = self.b4(b3+b2)
+        b5 = self.b5(b4+b1)
+
+        return b5
         
+
+def sdr_loss(pred, label):
+    return -(torch.sum(label**2)/torch.sum((pred-label)**2))q
 
 def train_model(speech_data, noise_data):
     model = DenoiseNetwork().to(device)
@@ -196,7 +270,8 @@ def train_model(speech_data, noise_data):
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
 
             output = model_processing(noisy_batch.to(device), model)
-            loss = torch.nn.functional.mse_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
+            # loss = torch.nn.functional.mse_loss(output[:, :, N*M-N:], speech_batch[:, :, N*M-N:].to(device))
+            loss = sdr_loss(output, speech_batch[:, :, N*M-N:].to(device))
             loss.backward()
             opt.step()
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
@@ -218,8 +293,9 @@ def train_model(speech_data, noise_data):
             while i < speech_sample.size()[2] - N*(M-1):
                 # print(noisy_sample[:, :, i:i+N*M].to(device).size())
                 block_input = noisy_sample[:, :, i:i+N*M].to(device)
-                app = model_processing(block_input, model)[:, :, N*M-N:]
-                loss = torch.nn.functional.mse_loss(app, block_input[:, :, N*M-N:])
+                # app = model_processing(block_input, model)[:, :, N*M-N:]
+                app = model_processing(block_input, model)
+                loss = sdr_loss(app, block_input[:, :, N*M-N:])
                 valid_loss += loss.to(cpu).item()
                 outputs.append(app)
                 i += N
