@@ -221,7 +221,7 @@ class DenoiseNetwork(torch.nn.Module):
         
 
 def sdr_loss(pred, label):
-    return -(torch.sum(label**2)/torch.sum((pred-label)**2))q
+    return -(torch.sum(label**2)/torch.sum((pred-label)**2))
 
 def train_model(speech_data, noise_data):
     model = DenoiseNetwork().to(device)
