@@ -1,7 +1,7 @@
 en
 UrbanSound8k
-NOISE.pt
-SPEECH.pt
+*.pt
+*.wav
 .vscode
 __pycache__
 trial*

@@ -167,17 +167,18 @@ def run_model(input, model):
     return stft_obj.inverse(d_magnitude.view(-1, RESIZE_CONSTANTS[0], int(RESIZE_CONSTANTS[1]/M)).to(device), phase[:, :, int(RESIZE_CONSTANTS[1]*(M-1)/M):].to(device))
 
 
-rand_input = torch.rand(1001, 1, N*M).to(device)
-model = DenoiseNetwork().to(device).eval()
-run_model(rand_input[1000:1001], model)
-before_time = current_milli_time()
-for i in range(1000):
-    b_before_time = current_milli_time()
+if __name__ == "__main__":
+    rand_input = torch.rand(1001, 1, N*M).to(device)
+    model = DenoiseNetwork().to(device).eval()
+    run_model(rand_input[1000:1001], model)
+    before_time = current_milli_time()
+    for i in range(1000):
+        b_before_time = current_milli_time()
 
-    run_model(rand_input[i:i+1], model)
+        run_model(rand_input[i:i+1], model)
 
-    b_after_time = current_milli_time()
-    #print(b_after_time-b_before_time)
+        b_after_time = current_milli_time()
+        #print(b_after_time-b_before_time)
 
-after_time = current_milli_time()
-print("Average Inference Time: "+str((after_time-before_time)/1000.0))
+    after_time = current_milli_time()
+    print("Average Inference Time: "+str((after_time-before_time)/1000.0))
