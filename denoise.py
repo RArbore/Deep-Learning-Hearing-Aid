@@ -295,7 +295,7 @@ def train_model(speech_data, noise_data):
                 block_input = noisy_sample[:, :, i:i+N*M].to(device)
                 # app = model_processing(block_input, model)[:, :, N*M-N:]
                 app = model_processing(block_input, model)
-                loss = sdr_loss(app, w * speech_sample[:, :, i+N*M-N:i+N*M])
+                loss = sdr_loss(app, w * speech_sample[:, :, i+N*M-N:i+N*M].to(device))
                 valid_loss += loss.to(cpu).item()
                 outputs.append(app)
                 i += N
