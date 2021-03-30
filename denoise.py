@@ -17,7 +17,7 @@ torch.manual_seed(manualSeed)
 
 VALID_DATA_SIZE = 10000000
 DATA_SIZE = 500000000 - VALID_DATA_SIZE
-BATCH_SIZE = 200
+BATCH_SIZE = 400
 BATCHES_PER_EPOCH = 500
 NUM_EPOCHS = 1000
 
@@ -26,7 +26,7 @@ M = 16
 RESIZE_CONSTANTS = [64, 256]
 nf = 16
 
-lr = 0.0001
+lr = 0.0002
 b1 = 0.5
 b2 = 0.999
 
@@ -255,18 +255,18 @@ def train_model(speech_data, noise_data):
             opt.zero_grad()
             model = model.train()
             speech_batch = []
-            noise_batch = []
+            #noise_batch = []
             noisy_batch = []
             selection_indices = (torch.rand(BATCH_SIZE, 2) * (DATA_SIZE - N*M)).int()
             for select in range(BATCH_SIZE):
                 speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N*M].float()
-                speech_batch.append(speech_entry)
                 noise_entry = noise_data[selection_indices[select, 1]:selection_indices[select, 1] + N*M].float()
-                noise_batch.append(noise_entry)
-                w = torch.rand(1)
+                #noise_batch.append(noise_entry)
+                w = torch.rand(1) * 0.7 + 0.2
+                speech_batch.append(w * speech_entry)
                 noisy_batch.append(((w * speech_entry) + ((1 - w) * noise_entry)))
             speech_batch = torch.stack(speech_batch).view(BATCH_SIZE, 1, N*M)
-            noise_batch = torch.stack(noise_batch).view(BATCH_SIZE, 1, N*M)
+            #noise_batch = torch.stack(noise_batch).view(BATCH_SIZE, 1, N*M)
             noisy_batch = torch.stack(noisy_batch).view(BATCH_SIZE, 1, N*M)
 
             output = model_processing(noisy_batch.to(device), model)
