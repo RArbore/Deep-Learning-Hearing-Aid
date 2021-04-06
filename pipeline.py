@@ -1,6 +1,4 @@
-from torchvision import transforms
 import threading
-import soundfile
 import pyaudio
 import timing
 import struct
@@ -8,7 +6,6 @@ import array
 import torch
 import time
 import math
-import wave
 import sys
 import os
 
