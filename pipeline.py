@@ -51,7 +51,6 @@ r_stream = p.open(
     channels = CHANNELS,
     rate = RATE,
     input = True,
-    frames_per_buffer = BLOCK,
 )
 
 w_stream = p.open(
