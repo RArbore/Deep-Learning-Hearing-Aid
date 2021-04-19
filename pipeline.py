@@ -67,7 +67,7 @@ w_stream.start_stream()
 print("Loading model...")
 with torch.no_grad():
     model = timing.DenoiseNetwork().to(timing.device).eval()
-    model.load_state_dict(torch.load("model.pt"))
+    model.load_state_dict(torch.load("/home/russel/Deep-Learning-Hearing-Aid/model.pt"))
     timing.run_model(torch.zeros(1, 1, IN_BUFF*BLOCK).to(timing.device), model)
 
     tensor_buffer = torch.zeros(IN_BUFF*BLOCK).float().to(timing.device)
