@@ -18,6 +18,7 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 
 raw_audio = None
 output = None
+out_flag = False
 
 def format_read(read):
     read = torch.tensor(struct.unpack(int(len(read)/4)*'f', read))
@@ -34,16 +35,16 @@ thread_running = True;
 def start_reading():
     global raw_audio
     while thread_running:
-        before_time = current_milli_time()
         raw_audio = r_stream.read(BLOCK)
-        print(current_milli_time() - before_time)
 
 def start_writing():
     global output
-    while output is None:
+    global out_flag
+    while not out_flag:
         pass
     while thread_running:
         output_copy = output
+        out_flag = False
         w_stream.write(output_copy)
 
 r_stream = p.open(
@@ -94,6 +95,7 @@ with torch.no_grad():
             processed = timing.run_model(tensor_buffer.view(1, 1, -1), model).cpu().view(-1)
 
             output = format_write(processed)
+            out_flag = True
             after_time = current_milli_time()
             #print(after_time - before_time)
 
