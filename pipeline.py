@@ -16,7 +16,8 @@ CHANNELS = 1
 
 current_milli_time = lambda: int(round(time.time() * 1000))
 
-raw_audio = 0
+raw_audio = None
+output = None
 
 def format_read(read):
     read = torch.tensor(struct.unpack(int(len(read)/4)*'f', read))
@@ -28,11 +29,29 @@ def format_write(write):
 
 p = pyaudio.PyAudio()
 
+thread_running = True;
+
+def start_reading():
+    global raw_audio
+    while thread_running:
+        before_time = current_milli_time()
+        raw_audio = r_stream.read(BLOCK)
+        print(current_milli_time() - before_time)
+
+def start_writing():
+    global output
+    while output is None:
+        pass
+    while thread_running:
+        output_copy = output
+        w_stream.write(output_copy)
+
 r_stream = p.open(
     format = pyaudio.paFloat32,
     channels = CHANNELS,
     rate = RATE,
     input = True,
+    frames_per_buffer = BLOCK,
 )
 
 w_stream = p.open(
@@ -45,43 +64,46 @@ w_stream = p.open(
 r_stream.start_stream()
 w_stream.start_stream()
 
-thread_running = True;
+print("Loading model...")
+with torch.no_grad():
+    model = timing.DenoiseNetwork().to(timing.device).eval()
+    model.load_state_dict(torch.load("model.pt"))
+    timing.run_model(torch.zeros(1, 1, IN_BUFF*BLOCK).to(timing.device), model)
 
-def start_reading():
-    global raw_audio
-    while thread_running:
-        raw_audio = r_stream.read(BLOCK)
+    tensor_buffer = torch.zeros(IN_BUFF*BLOCK).float().to(timing.device)
 
-model = timing.DenoiseNetwork().to(timing.device).eval()
-model.load_state_dict(torch.load("model.pt"))
-timing.run_model(torch.zeros(1, 1, IN_BUFF*BLOCK).to(timing.device), model)
+    before_time = 0
+    after_time = 0
 
-tensor_buffer = torch.zeros(IN_BUFF*BLOCK).float().to(timing.device)
+    read_thread = threading.Thread(target = start_reading, daemon = True)
+    read_thread.start()
 
-before_time = 0
-after_time = 0
+    write_thread = threading.Thread(target = start_writing, daemon = True)
+    write_thread.start()
 
-read_thread = threading.Thread(target = start_reading, daemon = True)
-read_thread.start()
+    print("Model loaded.")
 
-raw_audio_copy = raw_audio
-while True:
-    if not raw_audio_copy == raw_audio:
-        raw_audio_copy = raw_audio
-        tensor_sound = format_read(raw_audio_copy).to(timing.device)
-        tensor_buffer = torch.cat((tensor_buffer[BLOCK:], tensor_sound))
+    raw_audio_copy = raw_audio
+    while True:
+        if not raw_audio_copy == raw_audio:
+            before_time = current_milli_time()
+            raw_audio_copy = raw_audio
 
-        processed = timing.run_model(tensor_buffer.view(1, 1, -1), model).cpu().view(-1)
+            tensor_sound = format_read(raw_audio_copy).to(timing.device)[:IN_BUFF*BLOCK]
+            tensor_buffer = torch.cat((tensor_buffer[BLOCK:], tensor_sound))
 
-        output = format_write(processed)
-        w_stream.write(output)
+            processed = timing.run_model(tensor_buffer.view(1, 1, -1), model).cpu().view(-1)
 
+            output = format_write(processed)
+            after_time = current_milli_time()
+            #print(after_time - before_time)
 
-thread_running = False;
-read_thread.join()
+    thread_running = False;
+    read_thread.join()
+    write_thread.join()
 
-r_stream.stop_stream()
-r_stream.close()
-w_stream.stop_stream()
-w_stream.close()
-p.terminate()
+    r_stream.stop_stream()
+    r_stream.close()
+    w_stream.stop_stream()
+    w_stream.close()
+    p.terminate()
