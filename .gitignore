@@ -4,4 +4,5 @@ UrbanSound8k
 *.wav
 .vscode
 __pycache__
-trial*
+*trial*
+new_data

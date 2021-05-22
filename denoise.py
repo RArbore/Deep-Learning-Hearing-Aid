@@ -15,11 +15,12 @@ print("Random Seed: ", manualSeed)
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-VALID_DATA_SIZE = 10000000
-DATA_SIZE = 500000000 - VALID_DATA_SIZE
+VALID_DATA_SIZE = 0
+SPEECH_DATA_SIZE = 87637846 - VALID_DATA_SIZE
+NOISE_DATA_SIZE = 19817482 - VALID_DATA_SIZE
 BATCH_SIZE = 200
 BATCHES_PER_EPOCH = 500
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 100
 
 N = 1024
 M = 16
@@ -225,6 +226,7 @@ def sdr_loss(pred, label):
 
 def train_model(speech_data, noise_data):
     model = DenoiseNetwork().to(device)
+    model.load_state_dict(torch.load("model.pt"))
 
     current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -257,10 +259,11 @@ def train_model(speech_data, noise_data):
             speech_batch = []
             #noise_batch = []
             noisy_batch = []
-            selection_indices = (torch.rand(BATCH_SIZE, 2) * (DATA_SIZE - N*M)).int()
+            selection_indices_speech = (torch.rand(BATCH_SIZE) * (SPEECH_DATA_SIZE - N*M)).int()
+            selection_indices_noise = (torch.rand(BATCH_SIZE) * (NOISE_DATA_SIZE - N*M)).int()
             for select in range(BATCH_SIZE):
-                speech_entry = speech_data[selection_indices[select, 0]:selection_indices[select, 0] + N*M].float()
-                noise_entry = noise_data[selection_indices[select, 1]:selection_indices[select, 1] + N*M].float()
+                speech_entry = speech_data[selection_indices_speech[select]:selection_indices_speech[select] + N*M].float()
+                noise_entry = noise_data[selection_indices_noise[select]:selection_indices_noise[select] + N*M].float()
                 #noise_batch.append(noise_entry)
                 w = torch.rand(1) * 0.7 + 0.2
                 speech_batch.append(w * speech_entry)
@@ -276,39 +279,40 @@ def train_model(speech_data, noise_data):
             opt.step()
             epoch_loss += loss.to(cpu).item() / float(BATCHES_PER_EPOCH)
 
-        with torch.no_grad():
-            model = model.eval()
-            speech_sample_w = speech_data[DATA_SIZE:DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
-            noise_sample_w = noise_data[DATA_SIZE:DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
-            speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 2432)), dim=2)
-            noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 2432)), dim=2)
+        if VALID_DATA_SIZE > 0:
+            with torch.no_grad():
+                model = model.eval()
+                speech_sample_w = speech_data[SPEECH_DATA_SIZE:SPEECH_DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
+                noise_sample_w = noise_data[NOISE_DATA_SIZE:NOISE_DATA_SIZE+VALID_DATA_SIZE].view(1, 1, -1)
+                speech_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), speech_sample_w, torch.zeros(1, 1, 2432)), dim=2)
+                noise_sample = torch.cat((torch.zeros(1, 1, N*(M-1)), noise_sample_w, torch.zeros(1, 1, 2432)), dim=2)
 
-            w = 0.5
-            noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))
-            noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))
+                w = 0.5
+                noisy_sample = ((w * speech_sample) + ((1 - w) * noise_sample))
+                noisy_sample_w = ((w * speech_sample_w) + ((1 - w) * noise_sample_w))
 
-            valid_iters = 0
-            i = 0
-            outputs = []
-            while i < speech_sample.size()[2] - N*(M-1):
-                # print(noisy_sample[:, :, i:i+N*M].to(device).size())
-                block_input = noisy_sample[:, :, i:i+N*M].to(device)
-                # app = model_processing(block_input, model)[:, :, N*M-N:]
-                app = model_processing(block_input, model)
-                loss = sdr_loss(app, w * speech_sample[:, :, i+N*M-N:i+N*M].to(device))
-                valid_loss += loss.to(cpu).item()
-                outputs.append(app)
-                i += N
-                valid_iters += 1
-            output = torch.cat(outputs, dim=2)
-            output = output[:, :, N*(M-1):VALID_DATA_SIZE+N*(M-1)]
-            
-            valid_loss /= valid_iters
+                valid_iters = 0
+                i = 0
+                outputs = []
+                while i < speech_sample.size()[2] - N*(M-1):
+                    # print(noisy_sample[:, :, i:i+N*M].to(device).size())
+                    block_input = noisy_sample[:, :, i:i+N*M].to(device)
+                    # app = model_processing(block_input, model)[:, :, N*M-N:]
+                    app = model_processing(block_input, model)
+                    loss = sdr_loss(app, w * speech_sample[:, :, i+N*M-N:i+N*M].to(device))
+                    valid_loss += loss.to(cpu).item()
+                    outputs.append(app)
+                    i += N
+                    valid_iters += 1
+                output = torch.cat(outputs, dim=2)
+                output = output[:, :, N*(M-1):VALID_DATA_SIZE+N*(M-1)]
 
-            soundfile.write(folder + "/epoch"+str(epoch+1) + "/speech_sample.wav", speech_sample_w.view(-1).numpy(), 22050)
-            soundfile.write(folder + "/epoch"+str(epoch+1) + "/noise_sample.wav", noise_sample_w.view(-1).numpy(), 22050)
-            soundfile.write(folder + "/epoch"+str(epoch+1) + "/noisy_sample.wav", noisy_sample_w.view(-1).numpy(), 22050)
-            soundfile.write(folder + "/epoch"+str(epoch+1) + "/output_sample.wav", output.view(-1).to(cpu).numpy(), 22050)
+                valid_loss /= valid_iters
+
+                soundfile.write(folder + "/epoch"+str(epoch+1) + "/speech_sample.wav", speech_sample_w.view(-1).numpy(), 22050)
+                soundfile.write(folder + "/epoch"+str(epoch+1) + "/noise_sample.wav", noise_sample_w.view(-1).numpy(), 22050)
+                soundfile.write(folder + "/epoch"+str(epoch+1) + "/noisy_sample.wav", noisy_sample_w.view(-1).numpy(), 22050)
+                soundfile.write(folder + "/epoch"+str(epoch+1) + "/output_sample.wav", output.view(-1).to(cpu).numpy(), 22050)
 
         epoch_after_time = current_milli_time()
         seconds = math.floor((epoch_after_time - epoch_before_time) / 1000)
@@ -321,7 +325,7 @@ def train_model(speech_data, noise_data):
 
     after_time = current_milli_time()
 
-    torch.save(model.state_dict(), folder + "/model.pt")
+    torch.save(model.state_dict(), folder + "/new_model.pt")
     print("")
     f.close()
 
@@ -354,8 +358,8 @@ if __name__ == "__main__":
 
     print("Loading data...")
 
-    speech_data = torch.load("SPEECH.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + VALID_DATA_SIZE)), dims=0)
-    noise_data = torch.load("NOISE.pt").roll(int(torch.rand(1).item() * (DATA_SIZE + VALID_DATA_SIZE)), dims=0)
+    speech_data = torch.load("SPEECH.pt").roll(int(torch.rand(1).item() * (SPEECH_DATA_SIZE + VALID_DATA_SIZE)), dims=0)
+    noise_data = torch.load("NOISE.pt").roll(int(torch.rand(1).item() * (NOISE_DATA_SIZE + VALID_DATA_SIZE)), dims=0)
     
     speech_data = speech_data.roll(int(torch.rand(1).item() * speech_data.size(0)), dims=0)
     noise_data = noise_data.roll(int(torch.rand(1).item() * noise_data.size(0)), dims=0)
